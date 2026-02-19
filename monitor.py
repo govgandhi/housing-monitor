@@ -17,6 +17,10 @@ from pathlib import Path
 from urllib.request import urlopen
 
 SCRIPT_DIR = Path(__file__).parent
+SHEET_URL = (
+    "https://docs.google.com/spreadsheets/d/"
+    "1M8lfRF1vb_hR2VG858IZPisG1Y6vOCxEwyQCWdi7YUg/export?format=csv&gid=0"
+)
 STATE_FILE = SCRIPT_DIR / "seen_listings.json"
 LOG_FILE = SCRIPT_DIR / "monitor.log"
 ENV_FILE = SCRIPT_DIR / ".env"
@@ -289,11 +293,7 @@ def send_email(subject: str, html_body: str, env: dict[str, str]) -> None:
 def main() -> None:
     env = load_env()
 
-    sheet_url = env.get("SHEET_URL", "")
-    if not sheet_url:
-        log.error("Missing SHEET_URL in .env")
-        return
-
+    sheet_url = env.get("SHEET_URL", SHEET_URL)
     max_rent = float(env.get("MAX_RENT", "3000"))
 
     rows = fetch_csv(sheet_url)

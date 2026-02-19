@@ -13,6 +13,10 @@ from pathlib import Path
 from urllib.request import urlopen
 
 SCRIPT_DIR = Path(__file__).parent
+SHEET_URL = (
+    "https://docs.google.com/spreadsheets/d/"
+    "1M8lfRF1vb_hR2VG858IZPisG1Y6vOCxEwyQCWdi7YUg/export?format=csv&gid=0"
+)
 ENV_FILE = SCRIPT_DIR / ".env"
 LOG_FILE = SCRIPT_DIR / "monitor.log"
 STATE_FILE = SCRIPT_DIR / "seen_listings.json"
@@ -124,7 +128,7 @@ def send_alert(failures: list[str], env: dict[str, str]) -> None:
 def main() -> None:
     log.info("Running health check...")
     env = load_env()
-    failures = run_checks(env.get("SHEET_URL", ""))
+    failures = run_checks(env.get("SHEET_URL", SHEET_URL))
 
     if failures:
         log.warning(f"Health check found {len(failures)} issue(s):")

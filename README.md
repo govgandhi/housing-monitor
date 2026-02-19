@@ -1,6 +1,8 @@
 # Housing Monitor
 
-Monitors a Google Sheets spreadsheet for new housing listings and sends email alerts when new ones appear. Filters by rent ceiling and entire-unit availability.
+Monitors the [Georgetown Law Summer 2026 Sublets spreadsheet](https://docs.google.com/spreadsheets/d/1M8lfRF1vb_hR2VG858IZPisG1Y6vOCxEwyQCWdi7YUg) for new housing listings and sends email alerts when new ones appear. Filters by rent ceiling and entire-unit availability.
+
+Built for the specific column format of this sheet -- not a general-purpose spreadsheet monitor.
 
 ## Setup
 
@@ -10,30 +12,14 @@ Monitors a Google Sheets spreadsheet for new housing listings and sends email al
    ```
 
 2. Fill in `.env`:
-   - `SHEET_URL` — Google Sheets CSV export URL (use `/export?format=csv&gid=0`)
-   - `MAX_RENT` — maximum monthly rent filter
-   - `GMAIL_USER` / `GMAIL_APP_PASSWORD` — Gmail credentials ([create an App Password](https://myaccount.google.com/apppasswords))
-   - `RECIPIENT_EMAIL` — comma-separated list of recipients
+   - `MAX_RENT` -- maximum monthly rent filter (default: 3000)
+   - `GMAIL_USER` / `GMAIL_APP_PASSWORD` -- Gmail credentials ([create an App Password](https://myaccount.google.com/apppasswords))
+   - `RECIPIENT_EMAIL` -- comma-separated list of recipients
 
 3. Run it:
    ```bash
    python monitor.py
    ```
-
-## Spreadsheet Format
-
-The monitor expects a Google Sheet with these columns:
-
-| Column | Purpose |
-|--------|---------|
-| Name | Listing poster's name |
-| Bedrooms in Apt | Total bedrooms (e.g. "2 bedroom", "Studio") |
-| Rooms available | What's being offered (e.g. "Entire unit", "1 bedroom") |
-| Dates Available | Availability window |
-| Rent | Monthly rent (handles `$`, `k` suffix, `/week`) |
-| Contact | Contact info |
-| Description | Listing details |
-| Status | If it contains "taken" or "pending", the listing is skipped |
 
 ## Scheduling (macOS)
 
@@ -54,7 +40,7 @@ The example is configured to run every 3 hours while your machine is awake.
 
 ## How It Works
 
-- Fetches the spreadsheet as CSV
+- Fetches the [spreadsheet](https://docs.google.com/spreadsheets/d/1M8lfRF1vb_hR2VG858IZPisG1Y6vOCxEwyQCWdi7YUg) as CSV
 - Filters for entire units under the rent ceiling, skipping taken/pending listings
 - Fingerprints each listing (name + contact + rent + bedrooms) to track what's been seen
 - Emails only new listings, with excluded ones shown separately for review
