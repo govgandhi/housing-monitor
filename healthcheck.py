@@ -13,10 +13,6 @@ from pathlib import Path
 from urllib.request import urlopen
 
 SCRIPT_DIR = Path(__file__).parent
-SHEET_URL = (
-    "https://docs.google.com/spreadsheets/d/"
-    "1M8lfRF1vb_hR2VG858IZPisG1Y6vOCxEwyQCWdi7YUg/export?format=csv&gid=0"
-)
 ENV_FILE = SCRIPT_DIR / ".env"
 LOG_FILE = SCRIPT_DIR / "monitor.log"
 STATE_FILE = SCRIPT_DIR / "seen_listings.json"
@@ -43,12 +39,16 @@ def load_env() -> dict[str, str]:
     return env
 
 
-def run_checks() -> list[str]:
+def run_checks(sheet_url: str) -> list[str]:
     failures = []
+
+    if not sheet_url:
+        failures.append("SHEET_URL not set in .env")
+        return failures
 
     # 1. Sheet is accessible and returns CSV data
     try:
-        with urlopen(SHEET_URL, timeout=30) as resp:
+        with urlopen(sheet_url, timeout=30) as resp:
             raw = resp.read().decode("utf-8-sig")
         reader = csv.reader(io.StringIO(raw))
         headers = [h.strip() for h in next(reader)]
@@ -124,7 +124,7 @@ def send_alert(failures: list[str], env: dict[str, str]) -> None:
 def main() -> None:
     log.info("Running health check...")
     env = load_env()
-    failures = run_checks()
+    failures = run_checks(env.get("SHEET_URL", ""))
 
     if failures:
         log.warning(f"Health check found {len(failures)} issue(s):")

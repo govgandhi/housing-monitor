@@ -17,15 +17,10 @@ from pathlib import Path
 from urllib.request import urlopen
 
 SCRIPT_DIR = Path(__file__).parent
-SHEET_URL = (
-    "https://docs.google.com/spreadsheets/d/"
-    "1M8lfRF1vb_hR2VG858IZPisG1Y6vOCxEwyQCWdi7YUg/export?format=csv&gid=0"
-)
 STATE_FILE = SCRIPT_DIR / "seen_listings.json"
 LOG_FILE = SCRIPT_DIR / "monitor.log"
 ENV_FILE = SCRIPT_DIR / ".env"
 
-MAX_RENT = 2800
 TAKEN_KEYWORDS = {"taken", "sublet pending", "pending"}
 
 logging.basicConfig(
@@ -50,9 +45,9 @@ def load_env() -> dict[str, str]:
     return env
 
 
-def fetch_csv() -> list[dict[str, str]]:
+def fetch_csv(sheet_url: str) -> list[dict[str, str]]:
     log.info("Fetching spreadsheet...")
-    with urlopen(SHEET_URL, timeout=30) as resp:
+    with urlopen(sheet_url, timeout=30) as resp:
         raw = resp.read().decode("utf-8-sig")
     reader = csv.reader(io.StringIO(raw))
     headers_raw = next(reader)
@@ -150,7 +145,7 @@ def save_seen(hashes: set[str]) -> None:
 
 
 def filter_listings(
-    rows: list[dict[str, str]],
+    rows: list[dict[str, str]], max_rent: float,
 ) -> tuple[list[dict[str, str]], list[dict[str, str]]]:
     matching = []
     excluded = []
@@ -165,7 +160,7 @@ def filter_listings(
             reasons.append("not entire unit")
         if rent is None:
             reasons.append("rent unparseable")
-        elif rent >= MAX_RENT:
+        elif rent >= max_rent:
             reasons.append(f"rent ${rent:,.0f}")
         if reasons:
             row["_exclude_reason"] = ", ".join(reasons)
@@ -226,6 +221,9 @@ def _build_excluded_row(row: dict[str, str]) -> str:
 def build_email_html(
     new_listings: list[dict[str, str]],
     new_excluded: list[dict[str, str]] | None = None,
+    *,
+    max_rent: float,
+    sheet_url: str,
 ) -> str:
     cards = [_build_listing_card(row) for row in new_listings]
 
@@ -246,17 +244,18 @@ def build_email_html(
             {excluded_rows}
         </table>"""
 
-    sheet_url = "https://docs.google.com/spreadsheets/d/1M8lfRF1vb_hR2VG858IZPisG1Y6vOCxEwyQCWdi7YUg"
+    # Strip export params for the human-readable link
+    view_url = sheet_url.split("/export")[0] if "/export" in sheet_url else sheet_url
 
     return f"""
     <html><body style="font-family: -apple-system, Arial, sans-serif; max-width:600px; margin:0 auto; padding:16px;">
-        <h2 style="color:#1a1a1a;">New DC Housing Listings</h2>
-        <p style="color:#666;">{len(new_listings)} new listing{'s' if len(new_listings) != 1 else ''} under ${MAX_RENT:,}/mo &mdash; entire units only</p>
+        <h2 style="color:#1a1a1a;">New Housing Listings</h2>
+        <p style="color:#666;">{len(new_listings)} new listing{'s' if len(new_listings) != 1 else ''} under ${max_rent:,.0f}/mo &mdash; entire units only</p>
         {''.join(cards)}
         {excluded_section}
         <hr style="border:none; border-top:1px solid #eee; margin:20px 0;">
         <p style="color:#999; font-size:12px;">
-            <a href="{sheet_url}">View full spreadsheet</a> &bull;
+            <a href="{view_url}">View full spreadsheet</a> &bull;
             Generated {datetime.now().strftime('%Y-%m-%d %H:%M')}
         </p>
     </body></html>"""
@@ -290,7 +289,14 @@ def send_email(subject: str, html_body: str, env: dict[str, str]) -> None:
 def main() -> None:
     env = load_env()
 
-    rows = fetch_csv()
+    sheet_url = env.get("SHEET_URL", "")
+    if not sheet_url:
+        log.error("Missing SHEET_URL in .env")
+        return
+
+    max_rent = float(env.get("MAX_RENT", "3000"))
+
+    rows = fetch_csv(sheet_url)
 
     # Sanity check: if the sheet returned very few rows but we've seen many
     # before, this is likely a transient Google Sheets export failure.
@@ -302,7 +308,7 @@ def main() -> None:
         )
         return
 
-    matching, excluded = filter_listings(rows)
+    matching, excluded = filter_listings(rows, max_rent)
     all_current = matching + excluded
     current_hashes = {fingerprint(row) for row in all_current}
 
@@ -318,15 +324,16 @@ def main() -> None:
     )
 
     send_when_no_new = env.get("SEND_WHEN_NO_NEW", "false").lower() == "true"
+    email_kwargs = dict(max_rent=max_rent, sheet_url=sheet_url)
 
     if new_listings or new_excluded:
-        subject = f"🏠 {len(new_listings)} New DC Housing Listing{'s' if len(new_listings) != 1 else ''}"
-        body = build_email_html(new_listings, new_excluded)
+        subject = f"🏠 {len(new_listings)} New Housing Listing{'s' if len(new_listings) != 1 else ''}"
+        body = build_email_html(new_listings, new_excluded, **email_kwargs)
         send_email(subject, body, env)
     elif send_when_no_new:
         log.info("No new listings, but SEND_WHEN_NO_NEW is set")
-        body = build_email_html(matching)
-        send_email("🏠 DC Housing Monitor — No New Listings", body, env)
+        body = build_email_html(matching, **email_kwargs)
+        send_email("🏠 Housing Monitor — No New Listings", body, env)
     else:
         log.info("No new listings, skipping email")
 
